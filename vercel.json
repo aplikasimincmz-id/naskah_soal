@@ -1,8 +1,12 @@
 {
   "rewrites": [
     {
+      "source": "/api/query",
+      "destination": "/api/query.ts"
+    },
+    {
       "source": "/(.*)",
-      "destination": "/index.html"
+      "destination": "/"
     }
   ]
 }
