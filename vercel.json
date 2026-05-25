@@ -1,13 +1,13 @@
 {
-  "version": 2,
+  "functions": {
+    "api/query.ts": {
+      "maxDuration": 30
+    }
+  },
   "rewrites": [
     {
-      "source": "/api/query",
-      "destination": "/api/query.ts"
-    },
-    {
-      "source": "/(.*)",
-      "destination": "/index.html"
+      "source": "/api/(.*)",
+      "destination": "/api/$1"
     }
   ]
 }
