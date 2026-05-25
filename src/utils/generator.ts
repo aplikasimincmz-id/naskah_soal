@@ -11,10 +11,28 @@ function shuffleArray<T>(array: T[]): T[] {
 }
 
 function matchTopics(questionTopic: string, selectedTopics: string[]): boolean {
-  if (selectedTopics.length === 0 || selectedTopics.includes('semua')) {
+  if (!selectedTopics || selectedTopics.length === 0 || selectedTopics.some(t => t.toLowerCase() === 'semua')) {
     return true;
   }
-  return selectedTopics.includes(questionTopic);
+  
+  // Bersihkan teks soal: ubah ke huruf kecil dan hapus spasi berlebih di ujung string
+  const cleanQuestionTopic = questionTopic.toLowerCase().trim();
+
+  // Lakukan pengecekan menyeluruh dengan toleransi spasi, simbol, dan huruf kapital
+  return selectedTopics.some((topic) => {
+    const cleanSelected = topic.toLowerCase().trim();
+    
+    // Pencocokan 1: Sama persis setelah di-lowercase & trim
+    if (cleanSelected === cleanQuestionTopic) return true;
+    
+    // Pencocokan 2: Mengatasi perbedaan penulisan simbol '&' dan kata 'dan'
+    const normalizedSelected = cleanSelected.replace(/&/g, 'dan').replace(/\s+/g, ' ');
+    const normalizedQuestion = cleanQuestionTopic.replace(/&/g, 'dan').replace(/\s+/g, ' ');
+    if (normalizedSelected === normalizedQuestion) return true;
+
+    // Pencocokan 3: Toleransi jika string saling mengandung kata kunci (partial match)
+    return normalizedQuestion.includes(normalizedSelected) || normalizedSelected.includes(normalizedQuestion);
+  });
 }
 
 /**
@@ -42,10 +60,11 @@ export function generateExam(config: ExamConfig): GeneratedExam {
   const countSedang = total - countMudah - countSulit;
 
   // 2. Kumpulkan Soal Utama (Kriteria Paling Ketat Sesuai Input Guru)
+  // Menambahkan fungsi String() casting untuk q.classLevel & config.classLevel agar aman dari bug beda tipe data (string vs number)
   const primaryPool = questionBank.filter((q) =>
     q.subject === config.subject &&
     q.phase === config.phase &&
-    q.classLevel === config.classLevel &&
+    String(q.classLevel).trim() === String(config.classLevel).trim() &&
     config.questionTypes.includes(q.type) &&
     matchTopics(q.topic, selectedTopics)
   );
