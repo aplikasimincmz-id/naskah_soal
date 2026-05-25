@@ -2,7 +2,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // Pengaturan Header CORS
+  // Pengaturan Header CORS (Agar aman dari blokir browser)
   res.setHeader('Access-Control-Allow-Credentials', 'true');
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
@@ -27,23 +27,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
+    // 1. Ambil host dari connection string secara bersih
     const host = connectionString.split('@')[1]?.split('/')[0];
     if (!host) {
       return res.status(400).json({ error: 'Invalid connection string format' });
     }
 
-    // PERBAIKAN UTAMA: Mengubah dari /v1/sql menjadi /sql agar mendukung Parameterized Query ($1, $2, dst)
+    // Menggunakan endpoint /sql resmi yang mendukung parameter data $1, $2, dst
     const endpoint = `https://${host}/sql`;
 
+    // 2. Kirim ke Neon dengan format Header dan Bodi yang SANGAT KETAT
     const response = await fetch(endpoint, {
       method: 'POST',
       headers: { 
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        // Aturan Wajib Neon: String koneksi harus ditaruh di Header dengan teks bersih
+        'Neon-Connection-String': connectionString.trim()
       },
       body: JSON.stringify({
-        connectionString: connectionString.trim(),
-        query,
-        params, // Sekarang parameter ini didukung penuh oleh endpoint /sql
+        query: query,
+        params: params,
       }),
     });
 
