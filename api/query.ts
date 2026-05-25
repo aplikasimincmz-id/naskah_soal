@@ -2,7 +2,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // Atur header CORS agar hanya bisa diakses oleh frontend Anda sendiri
+  // Pengaturan Header CORS
   res.setHeader('Access-Control-Allow-Credentials', 'true');
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
@@ -27,16 +27,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    // Memotong host dari connection string untuk mendapatkan endpoint resmi Neon
+    // 1. Ambil host dari connection string
     const host = connectionString.split('@')[1]?.split('/')[0];
-    const endpoint = `https://${host}/sql`;
+    if (!host) {
+      return res.status(400).json({ error: 'Invalid connection string format' });
+    }
 
-    // Server-to-Server request (Aman 100% dari blokir CORS browser)
+    // Mengarah ke endpoint v1/sql resmi Neon
+    const endpoint = `https://${host}/v1/sql`;
+
+    // 2. Kirim ke Neon dengan Header "Neon-Connection-String" yang diwajibkan
     const response = await fetch(endpoint, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 
+        'Content-Type': 'application/json',
+        'Neon-Connection-String': connectionString.trim() // <--- INI KUNCI PERBAIKANNYA
+      },
       body: JSON.stringify({
-        connectionString,
         query,
         params,
       }),
