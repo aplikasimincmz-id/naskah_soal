@@ -5,47 +5,41 @@ import { queryNeon } from '../config/db';
 export async function generateExam(config: ExamConfig): Promise<GeneratedExam> {
   const totalDiminta = config.questionCount;
 
-  // 1. QUERY UTAMA: Ambil soal yang SANGAT COCOK dengan pilihan guru (Urutan diacak langsung oleh database)
-  // Kita pakai ORDER BY RANDOM() milik Postgres agar setiap di-refresh soalnya selalu baru
-  const rowsUtama = await queryNeon(`
+  // AMBIL SEMUA SOAL DARI MATA PELAJARAN TERKAIT (Biarkan database mengacaknya langsung)
+  const rows = await queryNeon(`
     SELECT * FROM questions 
     WHERE LOWER(subject) = LOWER($1)
-      AND phase = $2
-      AND TRIM(class_level) = TRIM($3)
-      AND type = ANY($4)
     ORDER BY RANDOM()
-  `, [config.subject, config.phase, config.classLevel, config.questionTypes]);
+  `, [config.subject]);
 
-  // Masukkan hasil utama ke array penampung
-  let bankSoalTerpilih: any[] = [...rowsUtama];
-
-  // 2. QUERY CADANGAN (ANTI-DUPLIKAT): Jika soal utama kurang dari kuota yang diminta guru
-  if (bankSoalTerpilih.length < totalDiminta) {
-    const jumlahKurang = totalDiminta - bankSoalTerpilih.length;
-    
-    // Kumpulkan ID soal yang sudah diambil agar tidak dipilih lagi oleh database (Anti-Duplikat)
-    const idSudahDipakai = bankSoalTerpilih.length > 0 
-      ? bankSoalTerpilih.map(q => q.id) 
-      : ['ID_DUMMY_AGAR_NOT_IN_TIDAK_ERROR'];
-
-    // Ambil soal cadangan dari mata pelajaran yang sama, tapi boleh beda kelas/topik asal tipenya cocok
-    const rowsCadangan = await queryNeon(`
-      SELECT * FROM questions 
-      WHERE LOWER(subject) = LOWER($1)
-        AND type = ANY($2)
-        AND id = NOT IN (${idSudahDipakai.map((_, i) => `$${i + 3}`).join(', ')})
-      ORDER BY RANDOM()
-      LIMIT $3
-    `, [config.subject, config.questionTypes, ...idSudahDipakai, jumlahKurang]);
-
-    // Gabungkan soal cadangan ke dalam hasil utama
-    bankSoalTerpilih = [...bankSoalTerpilih, ...rowsCadangan];
+  // JIKA DATABASE SAMA SEKALI TIDAK PUNYA DATA MAPEL INI
+  if (!rows || rows.length === 0) {
+    throw new Error(`Stok soal untuk mata pelajaran "${config.subject}" tidak ditemukan di database Neon!`);
   }
 
-  // 3. MAPPING KE FORMAT TYPESCRIPT
-  // Mengubah data dari snake_case database Neon ke camelCase aplikasi React Anda
-  const finalQuestions: Question[] = bankSoalTerpilih.slice(0, totalDiminta).map((row: any, index: number) => ({
-    id: `exam-${index + 1}`, // ID direset menjadi urutan kertas ujian (exam-1, exam-2, dst)
+  // LAKUKAN FILTERING KETAT DI SISI FRONTEND (Sangat aman, anti-error SQL, dan bebas duplikat)
+  // 1. Ambil yang sangat cocok dengan Fase dan Kelas terlebih dahulu
+  let filterUtama = rows.filter((row: any) => 
+    row.phase === config.phase && 
+    String(row.class_level).trim() === String(config.classLevel).trim() &&
+    config.questionTypes.includes(row.type)
+  );
+
+  // 2. Jika soal utama kurang dari kuota, ambil sisa kekurangannya dari soal mapel sama di kelas/fase lain (Cadangan)
+  if (filterUtama.length < totalDiminta) {
+    const idSudahDipakai = new Set(filterUtama.map((q: any) => q.id));
+    const sisaSoalCadangan = rows.filter((row: any) => !idSudahDipakai.has(row.id) && config.questionTypes.includes(row.type));
+    
+    // Gabungkan soal utama dengan soal cadangan
+    filterUtama = [...filterUtama, ...sisaSoalCadangan];
+  }
+
+  // Potong hasil agar pas dengan jumlah yang diminta guru
+  const bankSoalTerpilih = filterUtama.slice(0, totalDiminta);
+
+  // MAPPING DATA KE FORMAT TYPESCRIPT APLIKASI
+  const finalQuestions: Question[] = bankSoalTerpilih.map((row: any, index: number) => ({
+    id: `exam-${index + 1}`,
     text: row.text,
     type: row.type,
     difficulty: row.difficulty,
