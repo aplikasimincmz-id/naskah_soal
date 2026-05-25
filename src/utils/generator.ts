@@ -1,5 +1,5 @@
 import { Question, ExamConfig, GeneratedExam, Difficulty } from '../types';
-import { sql } from '../config/db'; // Mengambil koneksi Neon
+import { queryNeon } from '../config/db'; // Ambil fungsi queryNeon HTTP kita
 
 function shuffleArray<T>(array: T[]): T[] {
   const shuffled = [...array];
@@ -14,27 +14,17 @@ function matchTopics(questionTopic: string, selectedTopics: string[]): boolean {
   if (!selectedTopics || selectedTopics.length === 0 || selectedTopics.some(t => t.toLowerCase() === 'semua')) {
     return true;
   }
-  
   const cleanQuestionTopic = questionTopic.toLowerCase().trim();
-
   return selectedTopics.some((topic) => {
     const cleanSelected = topic.toLowerCase().trim();
     if (cleanSelected === cleanQuestionTopic) return true;
-    
     const normalizedSelected = cleanSelected.replace(/&/g, 'dan').replace(/\s+/g, ' ');
     const normalizedQuestion = cleanQuestionTopic.replace(/&/g, 'dan').replace(/\s+/g, ' ');
-    if (normalizedSelected === normalizedQuestion) return true;
-
     return normalizedQuestion.includes(normalizedSelected) || normalizedSelected.includes(normalizedQuestion);
   });
 }
 
-function pickStrict(
-  pool: Question[],
-  difficulty: Difficulty,
-  count: number,
-  excludeIds: Set<string>
-): Question[] {
+function pickStrict(pool: Question[], difficulty: Difficulty, count: number, excludeIds: Set<string>): Question[] {
   const available = pool.filter((q) => q.difficulty === difficulty && !excludeIds.has(q.id));
   const shuffled = shuffleArray(available);
   return shuffled.slice(0, Math.min(count, available.length));
@@ -49,12 +39,10 @@ export async function generateExam(config: ExamConfig): Promise<GeneratedExam> {
   const countSulit = Math.round((dist.sulit / 100) * total);
   const countSedang = total - countMudah - countSulit;
 
-  // 1. AMBIL DATA DARI NEON: Sangat simpel menggunakan query SQL biasa
-  // Mengambil semua soal yang memiliki mata pelajaran sesuai pilihan guru
-  const rows = await sql`SELECT * FROM questions WHERE subject = ${config.subject}`;
+  // 1. AMBIL DATA LEWAT HTTP: Menggunakan LOWER() untuk menghindari masalah typo huruf besar/kecil
+  const rows = await queryNeon('SELECT * FROM questions WHERE LOWER(subject) = LOWER($1)', [config.subject]);
   
-  // Mapping nama kolom database (snake_case) ke objek TypeScript (camelCase) jika berbeda
-  const remoteQuestionBank: Question[] = rows.map(row => ({
+  const remoteQuestionBank: Question[] = rows.map((row: any) => ({
     id: row.id,
     text: row.text,
     type: row.type,
@@ -62,15 +50,15 @@ export async function generateExam(config: ExamConfig): Promise<GeneratedExam> {
     subject: row.subject,
     grade: row.grade,
     phase: row.phase,
-    classLevel: row.class_level, // Menyelaraskan class_level database
+    classLevel: row.class_level,
     topic: row.topic,
-    options: row.options,
+    options: typeof row.options === 'string' ? JSON.parse(row.options) : row.options,
     correctAnswer: row.correct_answer,
     explanation: row.explanation,
     points: Number(row.points)
   }));
 
-  // 2. FILTER UTAMA (Kriteria Ketat: Fase, Kelas, Tipe Soal, Topik cocok)
+  // 2. Kumpulkan Soal Utama
   const primaryPool = remoteQuestionBank.filter((q) =>
     q.phase === config.phase &&
     String(q.classLevel).trim() === String(config.classLevel).trim() &&
@@ -91,7 +79,7 @@ export async function generateExam(config: ExamConfig): Promise<GeneratedExam> {
 
   let combined = [...pickedMudah, ...pickedSedang, ...pickedSulit];
 
-  // 3. FALLBACK: Jika stok kurang, longgarkan kriteria dengan menjaga tipe soal dan anti-duplikat
+  // 3. JIKA SOAL MASIH KURANG (FALLBACK)
   if (combined.length < total) {
     const fallbacks = [
       () => remoteQuestionBank.filter((q) => q.phase === config.phase && config.questionTypes.includes(q.type) && matchTopics(q.topic, selectedTopics)),
@@ -124,7 +112,6 @@ export async function generateExam(config: ExamConfig): Promise<GeneratedExam> {
       }
     }
 
-    // Ambil sisa kuota mutlak dari mapel terkait yang bertipe sesuai
     if (combined.length < total) {
       const finalAbsolutePool = remoteQuestionBank.filter((q) => 
         config.questionTypes.includes(q.type) &&
@@ -136,10 +123,8 @@ export async function generateExam(config: ExamConfig): Promise<GeneratedExam> {
     }
   }
 
-  // 4. Pengacakan akhir
   combined = shuffleArray(combined);
 
-  // 5. Mapping ID ke lembar kertas ujian baru
   const questions: Question[] = combined.slice(0, total).map((q, index) => ({
     ...q,
     id: `exam-${index + 1}`,
