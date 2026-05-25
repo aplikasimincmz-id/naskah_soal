@@ -60,12 +60,11 @@ export function generateExam(config: ExamConfig): GeneratedExam {
   const countSedang = total - countMudah - countSulit;
 
   // 2. Kumpulkan Soal Utama (Kriteria Paling Ketat Sesuai Input Guru)
-  // Menambahkan fungsi String() casting untuk q.classLevel & config.classLevel agar aman dari bug beda tipe data (string vs number)
   const primaryPool = questionBank.filter((q) =>
     q.subject === config.subject &&
     q.phase === config.phase &&
     String(q.classLevel).trim() === String(config.classLevel).trim() &&
-    config.questionTypes.includes(q.type) &&
+    config.questionTypes.includes(q.type) && // Kunci penyaringan tipe soal
     matchTopics(q.topic, selectedTopics)
   );
 
@@ -83,20 +82,16 @@ export function generateExam(config: ExamConfig): GeneratedExam {
 
   let combined = [...pickedMudah, ...pickedSedang, ...pickedSulit];
 
-  // 3. JIKA SOAL MASIH KURANG: Lakukan pelonggaran bertahap untuk mencari SOAL TAMBAHAN (FILLER)
+  // 3. JIKA SOAL MASIH KURANG: Lakukan pelonggaran bertahap dengan MENJAGA JENIS SOAL SECARA MUTLAK
   if (combined.length < total) {
-    // Hierarki pelonggaran (Fallback Pools) tanpa merusak soal utama yang sudah didapat
+    // Hierarki pelonggaran tetap wajib mematuhi config.questionTypes pilihan guru
     const fallbacks = [
-      // Fallback 1: Longgarkan Kelas, tapi tetap jaga Topik & Jenis Soal pilihan Guru
+      // Fallback 1: Longgarkan Kelas, jaga Topik & Jenis Soal pilihan Guru
       () => questionBank.filter((q) => q.subject === config.subject && q.phase === config.phase && config.questionTypes.includes(q.type) && matchTopics(q.topic, selectedTopics)),
-      // Fallback 2: Longgarkan Jenis Soal, tetap jaga Topik
-      () => questionBank.filter((q) => q.subject === config.subject && q.phase === config.phase && matchTopics(q.topic, selectedTopics)),
-      // Fallback 3: Longgarkan Topik, tetap jaga Jenis Soal di Fase yang sama
+      // Fallback 2: Longgarkan Topik, jaga Jenis Soal di Fase yang sama (Diubah agar jenis soal tetap dikunci)
       () => questionBank.filter((q) => q.subject === config.subject && q.phase === config.phase && config.questionTypes.includes(q.type)),
-      // Fallback 4: Longgarkan ke seluruh Mapel di Fase tersebut
-      () => questionBank.filter((q) => q.subject === config.subject && q.phase === config.phase),
-      // Fallback 5: Seluruh Mapel di Tingkat Sekolah yang sama (SD/SMP/SMA)
-      () => questionBank.filter((q) => q.subject === config.subject && q.grade === config.grade)
+      // Fallback 3: Longgarkan Kelas & Topik, tapi tetap jaga Jenis Soal di Tingkat Sekolah yang sama (SD/SMP/SMA)
+      () => questionBank.filter((q) => q.subject === config.subject && q.grade === config.grade && config.questionTypes.includes(q.type))
     ];
 
     for (const getFallbackPool of fallbacks) {
@@ -124,9 +119,13 @@ export function generateExam(config: ExamConfig): GeneratedExam {
       }
     }
 
-    // Amankan jika distribusi kesulitan masih tidak terpenuhi karena stok menipis, ambil acak apa saja yang tersisa dari mapel terkait
+    // Fallback darurat paling akhir: Ambil sisa soal yang bertipe sesuai, mengabaikan filter kelas/fase/topik demi mengejar kuota jumlah soal
     if (combined.length < total) {
-      const finalAbsolutePool = questionBank.filter((q) => q.subject === config.subject && !usedIds.has(q.id));
+      const finalAbsolutePool = questionBank.filter((q) => 
+        q.subject === config.subject && 
+        config.questionTypes.includes(q.type) && // Tetap dikunci ke pilihan jenis soal
+        !usedIds.has(q.id)
+      );
       const finalFiller = shuffleArray(finalAbsolutePool).slice(0, total - combined.length);
       combined.push(...finalFiller);
     }
@@ -139,6 +138,8 @@ export function generateExam(config: ExamConfig): GeneratedExam {
   const questions: Question[] = combined.slice(0, total).map((q, index) => ({
     ...q,
     id: `exam-${index + 1}`,
+    // Jika soal memiliki opsi jawaban, acak opsinya agar susunan A, B, C, D bervariasi bagi siswa
+    options: q.options ? shuffleArray(q.options) : undefined,
   }));
 
   return {
