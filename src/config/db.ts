@@ -1,7 +1,7 @@
 // src/config/db.ts
 
 export async function queryNeon(sqlQuery: string, args: any[] = []) {
-  // Menembak ke proxy backend Vercel milik kita sendiri (Satu domain, jadi ANTI-CORS)
+  // Menembak ke proxy lokal Vercel (Satu domain, anti-CORS, anti-mental)
   const endpoint = '/api/query';
 
   const response = await fetch(endpoint, {
@@ -21,7 +21,5 @@ export async function queryNeon(sqlQuery: string, args: any[] = []) {
   }
 
   const data = await response.json();
-  
-  // Mengembalikan baris data hasil query
   return data.rows || [];
 }
