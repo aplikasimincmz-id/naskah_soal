@@ -1,7 +1,8 @@
 // api/query.ts
+import { neon } from '@neondatabase/serverless';
 
 export default async function handler(req: any, res: any) {
-  // Pengaturan Header CORS
+  // Set CORS Headers
   res.setHeader('Access-Control-Allow-Credentials', 'true');
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
@@ -26,27 +27,11 @@ export default async function handler(req: any, res: any) {
   }
 
   try {
-    const host = connectionString.split('@')[1]?.split('/')[0];
-    if (!host) {
-      return res.status(400).json({ error: 'Invalid connection string format' });
-    }
-
-    const endpoint = `https://${host}/sql`;
-
-    const response = await fetch(endpoint, {
-      method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        connectionString: connectionString.trim(),
-        query,
-        params,
-      }),
-    });
-
-    const data = await response.json();
-    return res.status(response.status).json(data);
+    // Memanggil driver REST resmi Neon (Anti-Error Header, Anti-Error Parameterized Query)
+    const sql = neon(connectionString.trim());
+    const rows = await sql(query, params);
+    
+    return res.status(200).json({ rows });
   } catch (error: any) {
     return res.status(500).json({ error: error.message });
   }
