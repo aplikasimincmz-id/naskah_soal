@@ -1,10 +1,14 @@
 // src/config/db.ts
 
-// Masukkan URL HTTPS asli dari Neon Console Anda ke sini (Pastikan berawalan https://)
-const NEON_HTTP_URL = "https://ep-crimson-night-aoifv1y7.apirest.c-2.ap-southeast-1.aws.neon.tech/neondb/rest/v1"; 
+// Kode Anda sekarang aman! URL aslinya disembunyikan di dalam variabel lingkungan
+const NEON_HTTP_URL = import.meta.env.VITE_DATABASE_URL; 
 
 export async function queryNeon(sqlQuery: string, args: any[] = []) {
-  // Memastikan endpoint mengarah ke path jalurnya /v1/sql atau /sql resmi Neon
+  if (!NEON_HTTP_URL) {
+    console.error("Waduh, VITE_DATABASE_URL belum diatur di sistem server/hosting!");
+    return [];
+  }
+
   const endpoint = NEON_HTTP_URL.endsWith('/v1/sql') ? NEON_HTTP_URL : `${NEON_HTTP_URL.replace(/\/$/, '')}/sql`;
 
   const response = await fetch(endpoint, {
@@ -24,7 +28,5 @@ export async function queryNeon(sqlQuery: string, args: any[] = []) {
   }
 
   const data = await response.json();
-  
-  // Pengaman jika database mengembalikan objek kosong agar tidak membuat aplikasi crash
   return data.rows || []; 
 }
