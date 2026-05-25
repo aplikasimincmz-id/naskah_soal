@@ -1,24 +1,34 @@
-// src/config/db.ts
+export async function queryNeon(
+  sqlQuery: string,
+  args: any[] = []
+) {
+  try {
+    const response = await fetch('/api/query', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        query: sqlQuery,
+        params: args,
+      }),
+    });
 
-export async function queryNeon(sqlQuery: string, args: any[] = []) {
-  const endpoint = '/api/query';
+    const data = await response.json();
 
-  const response = await fetch(endpoint, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      query: sqlQuery,
-      params: args,
-    }),
-  });
+    if (!response.ok) {
+      throw new Error(
+        data.error || 'Gagal mengambil data database'
+      );
+    }
 
-  const data = await response.json();
+    return data.rows || [];
+  } catch (error: any) {
+    console.error('Database Error:', error);
 
-  if (!response.ok) {
-    throw new Error(data.error || 'Proxy Backend Error');
+    throw new Error(
+      error.message ||
+        'Koneksi database gagal'
+    );
   }
-
-  return data.rows || [];
 }
