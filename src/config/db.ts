@@ -1,7 +1,6 @@
 // src/config/db.ts
 
 export async function queryNeon(sqlQuery: string, args: any[] = []) {
-  // Menembak ke proxy lokal Vercel (Satu domain, anti-CORS, anti-mental)
   const endpoint = '/api/query';
 
   const response = await fetch(endpoint, {
@@ -15,11 +14,11 @@ export async function queryNeon(sqlQuery: string, args: any[] = []) {
     }),
   });
 
+  const data = await response.json();
+
   if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Proxy Backend Error: ${errorText}`);
+    throw new Error(data.error || 'Proxy Backend Error');
   }
 
-  const data = await response.json();
   return data.rows || [];
 }
