@@ -27,9 +27,11 @@ export default async function handler(req: any, res: any) {
   }
 
   try {
-    // Memanggil driver REST resmi Neon (Anti-Error Header, Anti-Error Parameterized Query)
+    // 1. Inisialisasi fungsi neon
     const sql = neon(connectionString.trim());
-    const rows = await sql(query, params);
+    
+    // 2. PERBAIKAN UTAMA: Menggunakan sql.query() agar mendukung placeholder ($1, $2, dst.)
+    const rows = await sql.query(query, params);
     
     return res.status(200).json({ rows });
   } catch (error: any) {
