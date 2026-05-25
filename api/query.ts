@@ -1,7 +1,7 @@
 // api/query.ts
 
 export default async function handler(req: any, res: any) {
-  // Pengaturan Header CORS agar aman dari blokir browser Anda
+  // Pengaturan Header CORS
   res.setHeader('Access-Control-Allow-Credentials', 'true');
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
@@ -10,7 +10,6 @@ export default async function handler(req: any, res: any) {
     'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version'
   );
 
-  // Respons cepat untuk preflight request CORS dari browser
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
@@ -27,7 +26,6 @@ export default async function handler(req: any, res: any) {
   }
 
   try {
-    // Memotong host secara aman untuk mengarah ke API endpoint Neon Anda
     const host = connectionString.split('@')[1]?.split('/')[0];
     if (!host) {
       return res.status(400).json({ error: 'Invalid connection string format' });
@@ -35,7 +33,6 @@ export default async function handler(req: any, res: any) {
 
     const endpoint = `https://${host}/sql`;
 
-    // Tembak langsung dari Server Vercel ke Server Neon (100% Bebas Blokir CORS)
     const response = await fetch(endpoint, {
       method: 'POST',
       headers: { 
