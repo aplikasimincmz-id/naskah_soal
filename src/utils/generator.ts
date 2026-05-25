@@ -1,5 +1,6 @@
+// src/utils/generator.ts
 import { Question, ExamConfig, GeneratedExam, Difficulty } from '../types';
-import { queryNeon } from '../config/db'; // Ambil fungsi queryNeon HTTP kita
+import { questionBank } from '../data/questionBank'; // Kembali menggunakan data lokal yang aman
 
 function shuffleArray<T>(array: T[]): T[] {
   const shuffled = [...array];
@@ -24,13 +25,20 @@ function matchTopics(questionTopic: string, selectedTopics: string[]): boolean {
   });
 }
 
-function pickStrict(pool: Question[], difficulty: Difficulty, count: number, excludeIds: Set<string>): Question[] {
+function pickStrict(
+  pool: Question[],
+  difficulty: Difficulty,
+  count: number,
+  excludeIds: Set<string>
+): Question[] {
+  // PENGAMAN UTAMA: !excludeIds.has(q.id) menjamin soal yang sama tidak akan diambil dua kali
   const available = pool.filter((q) => q.difficulty === difficulty && !excludeIds.has(q.id));
   const shuffled = shuffleArray(available);
   return shuffled.slice(0, Math.min(count, available.length));
 }
 
-export async function generateExam(config: ExamConfig): Promise<GeneratedExam> {
+// Kembalikan menjadi fungsi biasa (bukan async) agar stabil di frontend
+export function generateExam(config: ExamConfig): GeneratedExam {
   const selectedTopics = config.topics || [];
   const dist = config.difficultyDist;
   const total = config.questionCount;
@@ -39,27 +47,8 @@ export async function generateExam(config: ExamConfig): Promise<GeneratedExam> {
   const countSulit = Math.round((dist.sulit / 100) * total);
   const countSedang = total - countMudah - countSulit;
 
-  // 1. AMBIL DATA LEWAT HTTP: Menggunakan LOWER() untuk menghindari masalah typo huruf besar/kecil
-  const rows = await queryNeon('SELECT * FROM questions WHERE LOWER(subject) = LOWER($1)', [config.subject]);
-  
-  const remoteQuestionBank: Question[] = rows.map((row: any) => ({
-    id: row.id,
-    text: row.text,
-    type: row.type,
-    difficulty: row.difficulty,
-    subject: row.subject,
-    grade: row.grade,
-    phase: row.phase,
-    classLevel: row.class_level,
-    topic: row.topic,
-    options: typeof row.options === 'string' ? JSON.parse(row.options) : row.options,
-    correctAnswer: row.correct_answer,
-    explanation: row.explanation,
-    points: Number(row.points)
-  }));
-
-  // 2. Kumpulkan Soal Utama
-  const primaryPool = remoteQuestionBank.filter((q) =>
+  const primaryPool = questionBank.filter((q) =>
+    q.subject === config.subject &&
     q.phase === config.phase &&
     String(q.classLevel).trim() === String(config.classLevel).trim() &&
     config.questionTypes.includes(q.type) &&
@@ -79,12 +68,12 @@ export async function generateExam(config: ExamConfig): Promise<GeneratedExam> {
 
   let combined = [...pickedMudah, ...pickedSedang, ...pickedSulit];
 
-  // 3. JIKA SOAL MASIH KURANG (FALLBACK)
+  // Tahap Fallback bertahap jika stok soal di topik utama kurang
   if (combined.length < total) {
     const fallbacks = [
-      () => remoteQuestionBank.filter((q) => q.phase === config.phase && config.questionTypes.includes(q.type) && matchTopics(q.topic, selectedTopics)),
-      () => remoteQuestionBank.filter((q) => q.phase === config.phase && config.questionTypes.includes(q.type)),
-      () => remoteQuestionBank.filter((q) => q.grade === config.grade && config.questionTypes.includes(q.type))
+      () => questionBank.filter((q) => q.subject === config.subject && q.phase === config.phase && config.questionTypes.includes(q.type) && matchTopics(q.topic, selectedTopics)),
+      () => questionBank.filter((q) => q.subject === config.subject && q.phase === config.phase && config.questionTypes.includes(q.type)),
+      () => questionBank.filter((q) => q.subject === config.subject && q.grade === config.grade && config.questionTypes.includes(q.type))
     ];
 
     for (const getFallbackPool of fallbacks) {
@@ -112,8 +101,10 @@ export async function generateExam(config: ExamConfig): Promise<GeneratedExam> {
       }
     }
 
+    // Ambil paksa sisa kuota dari mapel terkait yang jenisnya sesuai
     if (combined.length < total) {
-      const finalAbsolutePool = remoteQuestionBank.filter((q) => 
+      const finalAbsolutePool = questionBank.filter((q) => 
+        q.subject === config.subject && 
         config.questionTypes.includes(q.type) &&
         !usedIds.has(q.id)
       );
