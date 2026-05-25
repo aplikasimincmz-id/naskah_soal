@@ -1,23 +1,35 @@
 // src/config/db.ts
 
-// Mengambil URL dari Environment Variable Vercel
-const NEON_HTTP_URL = import.meta.env.VITE_DATABASE_URL; 
+const CONNECTION_STRING = import.meta.env.VITE_DATABASE_URL; 
 
 export async function queryNeon(sqlQuery: string, args: any[] = []) {
-  // PENGAMAN JIKA VERCEL BELUM SINKRON:
-  if (!NEON_HTTP_URL) {
-    alert("⚠️ Error: Variabel 'VITE_DATABASE_URL' belum terbaca di Vercel. Pastikan sudah Redeploy!");
+  if (!CONNECTION_STRING) {
+    alert("⚠️ Error: Variabel 'VITE_DATABASE_URL' masih kosong di Vercel!");
     throw new Error("VITE_DATABASE_URL is missing");
   }
 
-  // Bersihkan format URL agar mengarah ke endpoint SQL resmi Neon
-  const baseUrl = NEON_HTTP_URL.trim().replace(/\/$/, '');
-  const endpoint = baseUrl.endsWith('/v1/sql') ? baseUrl : `${baseUrl}/sql`;
+  // 1. Ekstrak HOSTNAME dan PASSWORD secara otomatis dari string postgres://
+  // Format standar: postgres://user:password@hostname/database
+  const cleanString = CONNECTION_STRING.trim();
+  const passwordMatch = cleanString.match(/:\/\/([^:]+):([^@]+)@/);
+  const hostMatch = cleanString.match(/@([^\/]+)/);
+
+  if (!passwordMatch || !hostMatch) {
+    throw new Error("Format VITE_DATABASE_URL di Vercel salah! Gunakan format postgres://... asli dari Neon.");
+  }
+
+  const dbPassword = passwordMatch[2];
+  const dbHost = hostMatch[1];
+
+  // 2. Tembak ke Endpoint HTTP resmi milik Neon Global
+  const endpoint = `https://` + dbHost + `/v1/sql`;
 
   const response = await fetch(endpoint, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
+      // Menyuntikkan Bearer Token otomatis menggunakan password database Anda
+      'Authorization': `Bearer ${dbPassword}`, 
     },
     body: JSON.stringify({
       query: sqlQuery,
