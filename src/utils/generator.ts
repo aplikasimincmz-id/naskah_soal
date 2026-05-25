@@ -46,25 +46,36 @@ export async function generateExam(config: ExamConfig): Promise<GeneratedExam> {
   // 3. POTONG DAN PEMETAAN DATA KE FORMAT RE-INDEX NO SOAL (1, 2, 3...)
   const bankSoalTerpilih = hasilFilter.slice(0, totalDiminta);
 
+  // Ganti dari bagian "const finalQuestions = bankSoalTerpilih.map..." sampai akhir fungsi di src/utils/generator.ts
   const finalQuestions: Question[] = bankSoalTerpilih.map((row: any, index: number) => {
-    // Pengaman konversi data Pilihan Ganda (Options) dari teks database ke Array React
-    let opsiArray = ["A", "B", "C", "D"];
+    let opsiArray: string[] = ["A", "B", "C", "D"];
+
+    // PENGAMAN SILANG: Memastikan opsi pilihan ganda tidak merusak render halaman
     if (row.options) {
-      if (typeof row.options === 'string') {
-        try {
-          opsiArray = JSON.parse(row.options);
-        } catch (e) {
-          // Jika gagal parse JSON, coba pisahkan berdasarkan koma jika berupa teks biasa
-          opsiArray = row.options.split(',').map((o: string) => o.trim());
-        }
-      } else if (Array.isArray(row.options)) {
+      if (Array.isArray(row.options)) {
         opsiArray = row.options;
+      } else if (typeof row.options === 'string') {
+        const teksBersih = row.options.trim();
+        if (teksBersih.startsWith('[') && teksBersih.endsWith(']')) {
+          try {
+            opsiArray = JSON.parse(teksBersih);
+          } catch (e) {
+            opsiArray = teksBersih.replace(/[\[\]"]/g, '').split(',').map(o => o.trim());
+          }
+        } else {
+          opsiArray = teksBersih.split(',').map(o => o.trim());
+        }
       }
     }
 
+    // Jika opsi yang terkumpul kurang dari 4, tambahkan opsi dummy agar layout tidak pecah
+    while (opsiArray.length < 4) {
+      opsiArray.push(`Pilihan ${String.fromCharCode(65 + opsiArray.length)}`);
+    }
+
     return {
-      id: `exam-${index + 1}`, // ID di-reset menjadi nomor urut naskah ujian
-      text: row.text || 'Teks soal belum terisi',
+      id: `exam-${index + 1}`,
+      text: row.text || 'Teks pertanyaan belum diisi di database',
       type: row.type || config.questionTypes[0],
       difficulty: row.difficulty || 'sedang',
       subject: row.subject,
@@ -73,7 +84,7 @@ export async function generateExam(config: ExamConfig): Promise<GeneratedExam> {
       classLevel: row.class_level,
       topic: row.topic || 'Umum',
       options: opsiArray,
-      correctAnswer: row.correct_answer || '',
+      correctAnswer: row.correct_answer || (opsiArray[0] ?? ''),
       explanation: row.explanation || 'Tidak ada pembahasan.',
       points: Number(row.points) || 4
     };
