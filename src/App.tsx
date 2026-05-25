@@ -73,10 +73,12 @@ export default function App() {
         
         setExam(generatedExam);
         setView('preview');
-      } catch (error) {
+      } catch (error: any) {
         console.error("Gagal men-generate soal:", error);
-        setGenerationWarning("⚠️ Terjadi kesalahan saat mengambil soal dari database.");
-        setView('form');
+      
+        // Mengubah pesan warning agar tampil elegan di dashboard tanpa mental kasar
+        setGenerationWarning(error.message || "⚠️ Terjadi kesalahan saat mengambil soal dari database Neon.");
+        setView('form'); 
       }
     }, 2500);
   }, []);
