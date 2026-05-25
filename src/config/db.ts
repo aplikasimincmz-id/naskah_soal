@@ -1,15 +1,18 @@
 // src/config/db.ts
 
-// Kode Anda sekarang aman! URL aslinya disembunyikan di dalam variabel lingkungan
+// Mengambil URL dari Environment Variable Vercel
 const NEON_HTTP_URL = import.meta.env.VITE_DATABASE_URL; 
 
 export async function queryNeon(sqlQuery: string, args: any[] = []) {
+  // PENGAMAN JIKA VERCEL BELUM SINKRON:
   if (!NEON_HTTP_URL) {
-    console.error("Waduh, VITE_DATABASE_URL belum diatur di sistem server/hosting!");
-    return [];
+    alert("⚠️ Error: Variabel 'VITE_DATABASE_URL' belum terbaca di Vercel. Pastikan sudah Redeploy!");
+    throw new Error("VITE_DATABASE_URL is missing");
   }
 
-  const endpoint = NEON_HTTP_URL.endsWith('/v1/sql') ? NEON_HTTP_URL : `${NEON_HTTP_URL.replace(/\/$/, '')}/sql`;
+  // Bersihkan format URL agar mengarah ke endpoint SQL resmi Neon
+  const baseUrl = NEON_HTTP_URL.trim().replace(/\/$/, '');
+  const endpoint = baseUrl.endsWith('/v1/sql') ? baseUrl : `${baseUrl}/sql`;
 
   const response = await fetch(endpoint, {
     method: 'POST',
