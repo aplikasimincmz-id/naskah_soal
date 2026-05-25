@@ -1,8 +1,7 @@
 // api/query.ts
-import type { VercelRequest, VercelResponse } from '@vercel/node';
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // Pengaturan Header CORS (Agar aman dari blokir browser)
+export default async function handler(req: any, res: any) {
+  // Pengaturan Header CORS agar aman dari blokir browser Anda
   res.setHeader('Access-Control-Allow-Credentials', 'true');
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
@@ -11,6 +10,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version'
   );
 
+  // Respons cepat untuk preflight request CORS dari browser
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
@@ -27,26 +27,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    // 1. Ambil host dari connection string secara bersih
+    // Memotong host secara aman untuk mengarah ke API endpoint Neon Anda
     const host = connectionString.split('@')[1]?.split('/')[0];
     if (!host) {
       return res.status(400).json({ error: 'Invalid connection string format' });
     }
 
-    // Menggunakan endpoint /sql resmi yang mendukung parameter data $1, $2, dst
     const endpoint = `https://${host}/sql`;
 
-    // 2. Kirim ke Neon dengan format Header dan Bodi yang SANGAT KETAT
+    // Tembak langsung dari Server Vercel ke Server Neon (100% Bebas Blokir CORS)
     const response = await fetch(endpoint, {
       method: 'POST',
       headers: { 
-        'Content-Type': 'application/json',
-        // Aturan Wajib Neon: String koneksi harus ditaruh di Header dengan teks bersih
-        'Neon-Connection-String': connectionString.trim()
+        'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        query: query,
-        params: params,
+        connectionString: connectionString.trim(),
+        query,
+        params,
       }),
     });
 
